@@ -2,6 +2,7 @@ package me.martiii.p2pbridgeserver;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -11,6 +12,8 @@ import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.SocketAddress;
 
@@ -18,6 +21,8 @@ public class P2PBridgeServer {
     public static void main(String[] args) throws Exception {
         new P2PBridgeServer();
     }
+
+    private final InternalLogger logger = InternalLoggerFactory.getInstance(getClass());
 
     public P2PBridgeServer() throws Exception{
         final SslContext sslCtx;
@@ -87,12 +92,15 @@ public class P2PBridgeServer {
 
     private void clientConnected(Channel channel) {
         SocketAddress address = channel.remoteAddress();
+        logger.info("Device connected: " + address);
         if (add1 == null) {
             add1 = address;
             ch1 = channel;
+            logger.info("Assigned as device 1");
         } else if (add2 == null){
             add2 = address;
             ch2 = channel;
+            logger.info("Assigned as device 2");
         }
     }
 
@@ -100,17 +108,22 @@ public class P2PBridgeServer {
         SocketAddress address = channel.remoteAddress();
         if (address.equals(add1)) {
             add1 = null;
+            logger.info("Device 1 disconnected");
         } else if (address.equals(add2)) {
             add2 = null;
+            logger.info("Device 2 disconnected");
         }
     }
 
     private void clientMsgRead(Channel channel, ByteBuf msg) {
         SocketAddress address = channel.remoteAddress();
         if (add1 != null && add2 != null) {
+            String hex = ByteBufUtil.hexDump(msg);
             if (address == add1) {
+                logger.info("New message from device 1 to device 2: " + hex);
                 ch2.write(msg);
             } else if (address == add2) {
+                logger.info("New message from device 2 to device 1: " + hex);
                 ch1.write(msg);
             }
         }

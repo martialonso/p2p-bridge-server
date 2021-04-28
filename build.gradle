@@ -5,9 +5,15 @@ plugins {
 group 'me.martiii'
 version '1.0-SNAPSHOT'
 
+sourceCompatibility = 1.11
+
 jar {
     manifest {
         attributes 'Main-Class': 'me.martiii.p2pbridgeserver.P2PBridgeServer'
+    }
+
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 }
 

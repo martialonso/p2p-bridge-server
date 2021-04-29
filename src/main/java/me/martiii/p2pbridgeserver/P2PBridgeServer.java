@@ -14,6 +14,8 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.SocketAddress;
 
@@ -22,7 +24,7 @@ public class P2PBridgeServer {
         new P2PBridgeServer();
     }
 
-    private final InternalLogger logger = InternalLoggerFactory.getInstance(getClass());
+    private final Logger logger = LoggerFactory.getLogger(getClass());
 
     public P2PBridgeServer() throws Exception{
         final SslContext sslCtx;
@@ -41,7 +43,7 @@ public class P2PBridgeServer {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
-                    .handler(new LoggingHandler(LogLevel.INFO))
+                    //.handler(new LoggingHandler(LogLevel.INFO))
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(SocketChannel ch) {
@@ -80,7 +82,11 @@ public class P2PBridgeServer {
                         }
                     });
 
-            b.bind(port).sync().channel().closeFuture().sync();
+            ChannelFuture bindFuture = b.bind(port);
+            logger.info("Starting netty server on port " + port);
+            Channel channel = bindFuture.sync().channel();
+            logger.info("Netty server successfully started and bound to " + channel.localAddress());
+            channel.closeFuture().sync();
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
@@ -92,15 +98,16 @@ public class P2PBridgeServer {
 
     private void clientConnected(Channel channel) {
         SocketAddress address = channel.remoteAddress();
-        logger.info("Device connected: " + address);
         if (add1 == null) {
             add1 = address;
             ch1 = channel;
-            logger.info("Assigned as device 1");
+            logger.info("Connected from " + address + ", assigned as device 1");
         } else if (add2 == null){
             add2 = address;
             ch2 = channel;
-            logger.info("Assigned as device 2");
+            logger.info("Connected from " + address + ", assigned as device 2");
+        } else {
+            logger.info("Connected from " + address + ", not assigned (2 devices already connected)");
         }
     }
 
@@ -108,24 +115,26 @@ public class P2PBridgeServer {
         SocketAddress address = channel.remoteAddress();
         if (address.equals(add1)) {
             add1 = null;
-            logger.info("Device 1 disconnected");
+            logger.info("Disconnected from " + address + ", device 1 free");
         } else if (address.equals(add2)) {
             add2 = null;
-            logger.info("Device 2 disconnected");
+            logger.info("Disconnected from " + address + ", device 2 free");
         }
     }
 
     private void clientMsgRead(Channel channel, ByteBuf msg) {
         SocketAddress address = channel.remoteAddress();
+        String hex = ByteBufUtil.hexDump(msg);
         if (add1 != null && add2 != null) {
-            String hex = ByteBufUtil.hexDump(msg);
             if (address == add1) {
-                logger.info("New message from device 1 to device 2: " + hex);
                 ch2.write(msg);
+                logger.info("Device 1 -> Device 2: " + hex);
             } else if (address == add2) {
-                logger.info("New message from device 2 to device 1: " + hex);
                 ch1.write(msg);
+                logger.info("Device 2 -> Device 1: " + hex);
             }
+        } else {
+            logger.info("Message from " + address + " but no peer to send: " + hex);
         }
     }
 }

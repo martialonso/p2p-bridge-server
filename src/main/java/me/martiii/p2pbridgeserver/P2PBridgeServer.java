@@ -7,13 +7,9 @@ import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.logging.LogLevel;
-import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
-import io.netty.util.internal.logging.InternalLogger;
-import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -127,11 +123,13 @@ public class P2PBridgeServer {
         String hex = ByteBufUtil.hexDump(msg);
         if (add1 != null && add2 != null) {
             if (address == add1) {
-                ch2.write(msg);
+                ch2.writeAndFlush(msg);
                 logger.info("Device 1 -> Device 2: " + hex);
             } else if (address == add2) {
-                ch1.write(msg);
+                ch1.writeAndFlush(msg);
                 logger.info("Device 2 -> Device 1: " + hex);
+            } else {
+                logger.info("Message from unassigned device " + address + ": " + hex);
             }
         } else {
             logger.info("Message from " + address + " but no peer to send: " + hex);

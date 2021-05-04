@@ -9,6 +9,10 @@ application {
     mainClass = 'me.martiii.p2pbridgeserver.P2PBridgeServer'
 }
 
+compileJava {
+    options.release = 11
+}
+
 repositories {
     mavenCentral()
 }

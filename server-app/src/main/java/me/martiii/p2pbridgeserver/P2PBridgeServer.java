@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.SocketAddress;
+import java.util.Scanner;
 
 public class P2PBridgeServer {
     public static void main(String[] args) throws Exception {
@@ -21,8 +22,55 @@ public class P2PBridgeServer {
     }
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
+    private Channel serverChannel;
 
-    public P2PBridgeServer() throws Exception{
+    private SocketAddress add1, add2;
+    private Channel ch1, ch2;
+
+    public P2PBridgeServer() throws Exception {
+        new Thread(() -> {
+            boolean close = false;
+            Scanner scanner = new Scanner(System.in);
+            while (!close) {
+                String line = scanner.nextLine();
+                switch (line) {
+                    case "close":
+                        if (serverChannel != null) {
+                            logger.info("Shutting down netty server...");
+                            serverChannel.close();
+                        }
+                        close = true;
+                        break;
+                    case "device1":
+                        logger.info("Device 1: " + add1);
+                        break;
+                    case "device2":
+                        logger.info("Device 2: " + add2);
+                        break;
+                    case "disconnect1":
+                        if (add1 != null) {
+                            ch1.close();
+                            logger.info(add1 + " disconnected, device 1 free");
+                            add1 = null;
+                        } else {
+                            logger.info("No device connected as device 1");
+                        }
+                        break;
+                    case "disconnect2":
+                        if (add2 != null) {
+                            ch2.close();
+                            logger.info(add2 + " disconnected, device 2 free");
+                            add2 = null;
+                        } else {
+                            logger.info("No device connected as device 2");
+                        }
+                        break;
+                    default:
+                        logger.info("Unknown command. Available commands: device1, device2, disconnect1, disconnect2, close");
+                }
+            }
+        }, "Console Commands Thread").start();
+
         final SslContext sslCtx;
         if (System.getProperty("ssl") != null) {
             SelfSignedCertificate ssc = new SelfSignedCertificate();
@@ -80,17 +128,14 @@ public class P2PBridgeServer {
 
             ChannelFuture bindFuture = b.bind(port);
             logger.info("Starting netty server on port " + port);
-            Channel channel = bindFuture.sync().channel();
-            logger.info("Netty server successfully started and bound to " + channel.localAddress());
-            channel.closeFuture().sync();
+            serverChannel = bindFuture.sync().channel();
+            logger.info("Netty server successfully started and bound to " + serverChannel.localAddress());
+            serverChannel.closeFuture().sync();
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
     }
-
-    private SocketAddress add1, add2;
-    private Channel ch1, ch2;
 
     private void clientConnected(Channel channel) {
         SocketAddress address = channel.remoteAddress();

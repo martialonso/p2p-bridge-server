@@ -18,7 +18,7 @@ import java.util.Scanner;
 
 public class P2PBridgeServer {
     public static void main(String[] args) throws Exception {
-        new P2PBridgeServer();
+        new P2PBridgeServer(args);
     }
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -27,7 +27,7 @@ public class P2PBridgeServer {
     private SocketAddress add1, add2;
     private Channel ch1, ch2;
 
-    public P2PBridgeServer() throws Exception {
+    public P2PBridgeServer(String[] args) throws Exception {
         new Thread(() -> {
             boolean close = false;
             Scanner scanner = new Scanner(System.in);
@@ -71,7 +71,7 @@ public class P2PBridgeServer {
             }
         }, "Console Commands Thread").start();
 
-        final SslContext sslCtx;
+        SslContext sslCtx;
         if (System.getProperty("ssl") != null) {
             SelfSignedCertificate ssc = new SelfSignedCertificate();
             sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey()).build();
@@ -79,7 +79,12 @@ public class P2PBridgeServer {
             sslCtx = null;
         }
 
-        int port = Integer.parseInt(System.getProperty("port", "7635"));
+        int port;
+        if (args.length > 0) {
+            port = Integer.parseInt(args[0]);
+        } else {
+            port = 7635;    //Default port
+        }
 
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -87,7 +92,6 @@ public class P2PBridgeServer {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
-                    //.handler(new LoggingHandler(LogLevel.INFO))
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(SocketChannel ch) {
@@ -95,7 +99,6 @@ public class P2PBridgeServer {
                             if (sslCtx != null) {
                                 p.addLast(sslCtx.newHandler(ch.alloc()));
                             }
-                            //p.addLast(new LoggingHandler(LogLevel.INFO));
                             p.addLast(new ChannelInboundHandlerAdapter() {
                                 @Override
                                 public void channelActive(ChannelHandlerContext ctx) {

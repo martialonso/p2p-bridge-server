@@ -7,6 +7,10 @@ import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.DelimiterBasedFrameDecoder;
+import io.netty.handler.codec.Delimiters;
+import io.netty.handler.codec.string.StringDecoder;
+import io.netty.handler.codec.string.StringEncoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
@@ -23,9 +27,12 @@ public class P2PBridgeServer {
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private Channel serverChannel;
+    private Channel controlServerChannel;
 
     private SocketAddress add1, add2;
     private Channel ch1, ch2;
+
+    private Channel ctrCh;
 
     public P2PBridgeServer(String[] args) throws Exception {
         new Thread(() -> {
@@ -36,8 +43,9 @@ public class P2PBridgeServer {
                 switch (line) {
                     case "close":
                         if (serverChannel != null) {
-                            logger.info("Shutting down netty server...");
+                            logger.info("Shutting down netty servers...");
                             serverChannel.close();
+                            controlServerChannel.close();
                         }
                         close = true;
                         break;
@@ -65,6 +73,7 @@ public class P2PBridgeServer {
                             logger.info("No device connected as device 2");
                         }
                         break;
+                    case "": break;     //Ignore empty command
                     default:
                         logger.info("Unknown command. Available commands: device1, device2, disconnect1, disconnect2, close");
                 }
@@ -79,18 +88,25 @@ public class P2PBridgeServer {
             sslCtx = null;
         }
 
-        int port;
+        int serverPort;
         if (args.length > 0) {
-            port = Integer.parseInt(args[0]);
+            serverPort = Integer.parseInt(args[0]);
         } else {
-            port = 7635;    //Default port
+            serverPort = 7635;    //Default server port
+        }
+
+        int controlPort;
+        if (args.length > 1) {
+            controlPort = Integer.parseInt(args[1]);
+        } else {
+            controlPort = 7636;    //Default control port
         }
 
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
-            ServerBootstrap b = new ServerBootstrap();
-            b.group(bossGroup, workerGroup)
+            ServerBootstrap serverBootstrap = new ServerBootstrap();
+            serverBootstrap.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
@@ -122,6 +138,7 @@ public class P2PBridgeServer {
 
                                 @Override
                                 public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+                                    //TODO: Handle Connection reset by peer exceptions
                                     cause.printStackTrace();
                                     ctx.close();
                                 }
@@ -129,11 +146,43 @@ public class P2PBridgeServer {
                         }
                     });
 
-            ChannelFuture bindFuture = b.bind(port);
-            logger.info("Starting netty server on port " + port);
-            serverChannel = bindFuture.sync().channel();
+            ChannelFuture serverBindFuture = serverBootstrap.bind(serverPort);
+            logger.info("Starting netty server on port " + serverPort);
+            serverChannel = serverBindFuture.sync().channel();
             logger.info("Netty server successfully started and bound to " + serverChannel.localAddress());
+
+
+            ServerBootstrap controlBootstrap = new ServerBootstrap();
+            controlBootstrap.group(bossGroup, workerGroup)
+                    .channel(NioServerSocketChannel.class)
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel ch) {
+                            ChannelPipeline p = ch.pipeline();
+                            if (sslCtx != null) {
+                                p.addLast(sslCtx.newHandler(ch.alloc()));
+                            }
+                            p.addLast(new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter()));
+                            p.addLast(new StringDecoder());
+                            p.addLast(new StringEncoder());
+                            p.addLast(new ChannelInboundHandlerAdapter() {
+                                @Override
+                                public void channelActive(ChannelHandlerContext ctx) {
+                                    ctrCh = ctx.channel();
+                                    logger.info("Control Desktop App connected from " + ctrCh.remoteAddress());
+                                    ctrCh.writeAndFlush("control server connected\n");
+                                }
+                            });
+                        }
+                    });
+            
+            ChannelFuture controlBindFuture = controlBootstrap.bind(controlPort);
+            logger.info("Starting netty server (control desktop) on port " + controlPort);
+            controlServerChannel = controlBindFuture.sync().channel();
+            logger.info("Netty server (control desktop) successfully started and bound to " + controlServerChannel.localAddress());
+
             serverChannel.closeFuture().sync();
+            controlServerChannel.closeFuture().sync();
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
@@ -145,10 +194,12 @@ public class P2PBridgeServer {
         if (add1 == null) {
             add1 = address;
             ch1 = channel;
+            ctrCh.writeAndFlush("connected1 " + address + "\n");
             logger.info("Connected from " + address + ", assigned as device 1");
         } else if (add2 == null){
             add2 = address;
             ch2 = channel;
+            ctrCh.writeAndFlush("connected2 " + address + "\n");
             logger.info("Connected from " + address + ", assigned as device 2");
         } else {
             logger.info("Connected from " + address + ", not assigned (2 devices already connected)");
@@ -159,9 +210,11 @@ public class P2PBridgeServer {
         SocketAddress address = channel.remoteAddress();
         if (address.equals(add1)) {
             add1 = null;
+            ctrCh.writeAndFlush("disconnected1 " + address + "\n");
             logger.info("Disconnected from " + address + ", device 1 free");
         } else if (address.equals(add2)) {
             add2 = null;
+            ctrCh.writeAndFlush("disconnected2 " + address + "\n");
             logger.info("Disconnected from " + address + ", device 2 free");
         }
     }
@@ -172,9 +225,11 @@ public class P2PBridgeServer {
         if (add1 != null && add2 != null) {
             if (address == add1) {
                 ch2.writeAndFlush(msg);
+                ctrCh.writeAndFlush("data1 " + hex + "\n");
                 logger.info("Device 1 -> Device 2: " + hex);
             } else if (address == add2) {
                 ch1.writeAndFlush(msg);
+                ctrCh.writeAndFlush("data2 " + hex + "\n");
                 logger.info("Device 2 -> Device 1: " + hex);
             } else {
                 logger.info("Message from unassigned device " + address + ": " + hex);

@@ -61,6 +61,13 @@ public class P2PBridgeControl {
                                 }
 
                                 @Override
+                                public void channelInactive(ChannelHandlerContext ctx) {
+                                    screen.log("control server disconnected");
+                                    screen.connectionUpdate('1', null);
+                                    screen.connectionUpdate('2', null);
+                                }
+
+                                @Override
                                 public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
                                     screen.log(cause.toString());
                                     ctx.close();

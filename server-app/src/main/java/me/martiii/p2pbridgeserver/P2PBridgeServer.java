@@ -17,6 +17,7 @@ import io.netty.handler.ssl.util.SelfSignedCertificate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.Scanner;
 
@@ -50,16 +51,14 @@ public class P2PBridgeServer {
                         close = true;
                         break;
                     case "device1":
-                        logger.info("Device 1: " + add1);
+                        logger.info("device1 " + add1);
                         break;
                     case "device2":
-                        logger.info("Device 2: " + add2);
+                        logger.info("device2 " + add2);
                         break;
                     case "disconnect1":
                         if (add1 != null) {
                             ch1.close();
-                            logger.info(add1 + " disconnected, device 1 free");
-                            add1 = null;
                         } else {
                             logger.info("No device connected as device 1");
                         }
@@ -67,8 +66,6 @@ public class P2PBridgeServer {
                     case "disconnect2":
                         if (add2 != null) {
                             ch2.close();
-                            logger.info(add2 + " disconnected, device 2 free");
-                            add2 = null;
                         } else {
                             logger.info("No device connected as device 2");
                         }
@@ -138,8 +135,13 @@ public class P2PBridgeServer {
 
                                 @Override
                                 public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-                                    //TODO: Handle Connection reset by peer exceptions
-                                    cause.printStackTrace();
+                                    if (cause instanceof IOException) {
+                                        logger.info(cause.getMessage());
+                                    } else {
+                                        cause.printStackTrace();
+                                    }
+                                    Channel ch = ctx.channel();
+                                    clientDisconnected(ch);
                                     ctx.close();
                                 }
                             });
@@ -171,6 +173,27 @@ public class P2PBridgeServer {
                                     ctrCh = ctx.channel();
                                     logger.info("Control Desktop App connected from " + ctrCh.remoteAddress());
                                     ctrCh.writeAndFlush("control server connected\n");
+                                    if (add1 != null) {
+                                        ctrCh.writeAndFlush("connected1 " + add1 + "\n");
+                                    }
+                                    if (add2 != null) {
+                                        ctrCh.writeAndFlush("connected2 " + add2 + "\n");
+                                    }
+                                }
+
+                                @Override
+                                public void channelInactive(ChannelHandlerContext ctx) {
+                                    ctrCh = null;
+                                }
+
+                                @Override
+                                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+                                    if (cause instanceof IOException) {
+                                        logger.info(cause.getMessage() + " (control desktop)");
+                                    } else {
+                                        cause.printStackTrace();
+                                    }
+                                    ctx.close();
                                 }
                             });
                         }
@@ -194,15 +217,13 @@ public class P2PBridgeServer {
         if (add1 == null) {
             add1 = address;
             ch1 = channel;
-            ctrCh.writeAndFlush("connected1 " + address + "\n");
-            logger.info("Connected from " + address + ", assigned as device 1");
+            log("connected1 " + address);
         } else if (add2 == null){
             add2 = address;
             ch2 = channel;
-            ctrCh.writeAndFlush("connected2 " + address + "\n");
-            logger.info("Connected from " + address + ", assigned as device 2");
+            log("connected2 " + address);
         } else {
-            logger.info("Connected from " + address + ", not assigned (2 devices already connected)");
+            log("connected? " + address);
         }
     }
 
@@ -210,32 +231,37 @@ public class P2PBridgeServer {
         SocketAddress address = channel.remoteAddress();
         if (address.equals(add1)) {
             add1 = null;
-            ctrCh.writeAndFlush("disconnected1 " + address + "\n");
-            logger.info("Disconnected from " + address + ", device 1 free");
+            log("disconnected1 " + address);
         } else if (address.equals(add2)) {
             add2 = null;
-            ctrCh.writeAndFlush("disconnected2 " + address + "\n");
-            logger.info("Disconnected from " + address + ", device 2 free");
+            log("disconnected2 " + address);
+        } else {
+            log("disconnected? " + address);
         }
     }
 
     private void clientMsgRead(Channel channel, ByteBuf msg) {
         SocketAddress address = channel.remoteAddress();
         String hex = ByteBufUtil.hexDump(msg);
-        if (add1 != null && add2 != null) {
-            if (address == add1) {
+        if (address == add1) {
+            if (add2 != null) {
                 ch2.writeAndFlush(msg);
-                ctrCh.writeAndFlush("data1 " + hex + "\n");
-                logger.info("Device 1 -> Device 2: " + hex);
-            } else if (address == add2) {
-                ch1.writeAndFlush(msg);
-                ctrCh.writeAndFlush("data2 " + hex + "\n");
-                logger.info("Device 2 -> Device 1: " + hex);
-            } else {
-                logger.info("Message from unassigned device " + address + ": " + hex);
             }
+            log("data1 " + hex);
+        } else if (address == add2) {
+            if (add1 != null) {
+                ch1.writeAndFlush(msg);
+            }
+            log("data2 " + hex);
         } else {
-            logger.info("Message from " + address + " but no peer to send: " + hex);
+            log("data? " + address + " - " + hex);
+        }
+    }
+
+    private void log(String msg) {
+        logger.info(msg);
+        if (ctrCh != null) {
+            ctrCh.writeAndFlush(msg + "\n");
         }
     }
 }

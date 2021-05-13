@@ -5,10 +5,10 @@ import javax.swing.text.DefaultCaret;
 import java.awt.*;
 
 public class Screen extends JFrame {
-    private ConnectionPanel con1;
-    private ConnectionPanel con2;
+    private final ConnectionPanel con1;
+    private final ConnectionPanel con2;
 
-    private JTextArea dataArea;
+    private final JTextArea dataArea;
 
     public Screen() {
         setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -37,17 +37,15 @@ public class Screen extends JFrame {
     public void log(String msg) {
         dataArea.append(msg + "\n");
         if (msg.startsWith("connected")) { //connected1 127.0.0.1:00001
-            if (msg.charAt(9) == '1') {
-                con1.connectionUpdate(msg.substring(11));
-            } else {
-                con2.connectionUpdate(msg.substring(11));
-            }
+            connectionUpdate(msg.charAt(9), msg.substring(11));
         } else if (msg.startsWith("disconnected")) { //disconnected1 127.0.0.1:00001
-            if (msg.charAt(12) == '1') {
-                con1.connectionUpdate(null);
-            } else {
-                con2.connectionUpdate(null);
-            }
+            connectionUpdate(msg.charAt(12), null);
         }
+    }
+
+    public void connectionUpdate(char id, String address) {
+        if (id != '1' && id != '2') return;
+        ConnectionPanel connectionPanel = id == '1' ? con1 : con2;
+        connectionPanel.connectionUpdate(address);
     }
 }

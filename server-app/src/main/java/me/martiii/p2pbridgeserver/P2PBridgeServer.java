@@ -77,14 +77,6 @@ public class P2PBridgeServer {
             }
         }, "Console Commands Thread").start();
 
-        SslContext sslCtx;
-        if (System.getProperty("ssl") != null) {
-            SelfSignedCertificate ssc = new SelfSignedCertificate();
-            sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey()).build();
-        } else {
-            sslCtx = null;
-        }
-
         int serverPort;
         if (args.length > 0) {
             serverPort = Integer.parseInt(args[0]);
@@ -97,6 +89,14 @@ public class P2PBridgeServer {
             controlPort = Integer.parseInt(args[1]);
         } else {
             controlPort = 7636;    //Default control port
+        }
+
+        SslContext sslCtx;
+        if (args.length > 2 && args[2].equals("true")) {
+            SelfSignedCertificate ssc = new SelfSignedCertificate();
+            sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey()).build();
+        } else {
+            sslCtx = null;
         }
 
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
@@ -149,7 +149,7 @@ public class P2PBridgeServer {
                     });
 
             ChannelFuture serverBindFuture = serverBootstrap.bind(serverPort);
-            logger.info("Starting netty server on port " + serverPort);
+            logger.info("Starting netty server on port " + serverPort + (sslCtx != null ? " (ssl)" : ""));
             serverChannel = serverBindFuture.sync().channel();
             logger.info("Netty server successfully started and bound to " + serverChannel.localAddress());
 
@@ -200,7 +200,7 @@ public class P2PBridgeServer {
                     });
             
             ChannelFuture controlBindFuture = controlBootstrap.bind(controlPort);
-            logger.info("Starting netty server (control desktop) on port " + controlPort);
+            logger.info("Starting netty server (control desktop) on port " + controlPort + (sslCtx != null ? " (ssl)" : ""));
             controlServerChannel = controlBindFuture.sync().channel();
             logger.info("Netty server (control desktop) successfully started and bound to " + controlServerChannel.localAddress());
 

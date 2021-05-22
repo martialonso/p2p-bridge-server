@@ -22,20 +22,19 @@ public class P2PBridgeControl {
     public P2PBridgeControl(String[] args) throws Exception {
         Screen screen = new Screen();
 
-        SslContext sslCtx;
-        if (System.getProperty("ssl") != null) {
-            sslCtx = SslContextBuilder.forClient()
-                    .trustManager(InsecureTrustManagerFactory.INSTANCE).build();
-        } else {
-            sslCtx = null;
-        }
-
         String host = args[0];
         int port;
         if (args.length > 1) {
             port = Integer.parseInt(args[1]);
         } else {
             port = 7636;    //Default port
+        }
+
+        SslContext sslCtx;
+        if (args.length > 2 && args[2].equals("true")) {
+            sslCtx = SslContextBuilder.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
+        } else {
+            sslCtx = null;
         }
 
         EventLoopGroup group = new NioEventLoopGroup();

@@ -22,6 +22,10 @@ public class P2PBridgeControl {
     public P2PBridgeControl(String[] args) throws Exception {
         Screen screen = new Screen();
 
+        if (args.length == 0) {
+            screen.log("You must specify the server host by running this app with the server host as the first argument");
+            return;
+        }
         String host = args[0];
         int port;
         if (args.length > 1) {

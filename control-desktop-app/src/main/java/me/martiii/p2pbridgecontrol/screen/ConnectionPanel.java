@@ -16,7 +16,6 @@ public class ConnectionPanel extends JPanel {
     public ConnectionPanel(int id) {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(new EmptyBorder(15, 15, 15, 15));
-        setBackground(new Color(230, 230, 230));
 
         JLabel nameLabel = new JLabel("Connection " + id);
         nameLabel.setFont(nameLabel.getFont().deriveFont(20f));

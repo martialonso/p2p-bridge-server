@@ -243,18 +243,19 @@ public class P2PBridgeServer {
     private void clientMsgRead(Channel channel, ByteBuf msg) {
         SocketAddress address = channel.remoteAddress();
         String hex = ByteBufUtil.hexDump(msg);
+        String ascii = new String(ByteBufUtil.getBytes(msg));
         if (address == add1) {
             if (add2 != null) {
                 ch2.writeAndFlush(msg);
             }
-            log("data1 " + hex);
+            log("data1 " + hex + " " + ascii);
         } else if (address == add2) {
             if (add1 != null) {
                 ch1.writeAndFlush(msg);
             }
-            log("data2 " + hex);
+            log("data2 " + hex + " " + ascii);
         } else {
-            log("data? " + address + " - " + hex);
+            log("data? " + address + " " + hex + " " + ascii);
         }
     }
 
